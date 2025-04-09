@@ -40,13 +40,14 @@ end
 
 rule "Check Daily Limit"
 salience 10
+no-loop true // 新增此行，防止重复执行
 when
     $t: Transaction($userId: userId, $date: timestamp.toLocalDate(), $amount: amount, rejected == false)
     $ds: DailySummary(userId == $userId, date == $date, $total: totalAmount)
     eval($total + $amount > 10000.00)
 then
     modify($t) { setRejected(true) };
-    System.out.println("[风控触发] 用户 " + $userId + " 单日限额已达");
+    System.out.println("[风控触发] 用户 " + $userId + " 单日限额已达:" + ($total + $amount));
 end
 
 rule "Update Summary"
@@ -65,6 +66,7 @@ then
             jedis.close();
         }
     }
+    retract($t);
     DecimalFormat df = new DecimalFormat("#0.00");
     System.out.println("[余额修改] 用户 " + $userId + " 单日累加至:"+df.format($ds.getTotalAmount()));
 end
