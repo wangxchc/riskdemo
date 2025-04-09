@@ -46,9 +46,15 @@ when
     $ds: DailySummary(userId == $userId, date == $date)
 then
     String key = "daily:" + $userId + ":" + $date;
-    Jedis jedis = myRedisPool.getResource();
-    jedis.incrByFloat(key, $amount);
-    modify($ds) { setTotalAmount($ds.getTotalAmount() + $amount) };
-    System.out.println("[余额修改] 用户 " + $userId + " 单日累加"+$ds.getTotalAmount());
-    jedis.close();
+    Jedis jedis = null;
+    try{
+        jedis = myRedisPool.getResource();
+        jedis.incrByFloat(key, $amount);
+        modify($ds) { setTotalAmount($ds.getTotalAmount() + $amount) };
+    }finally{
+        if(jedis!=null){
+            jedis.close();
+        }
+    }
+    System.out.println("[余额修改] 用户 " + $userId + " 单日累加至"+$ds.getTotalAmount());
 end
