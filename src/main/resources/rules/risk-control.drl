@@ -1,0 +1,54 @@
+package rules
+
+import java.time.LocalDate
+import com.nongxinyin.demo.model.Transaction
+import com.nongxinyin.demo.model.DailySummary
+import redis.clients.jedis.Jedis
+import com.nongxinyin.demo.pool.MyJedisPool
+
+global com.nongxinyin.demo.pool.MyJedisPool myRedisPool
+
+declare Transaction
+    @role(event)
+end
+
+rule "Initialize Daily Summary"
+when
+    $t: Transaction(
+        $userId: userId,
+        $date: timestamp.toLocalDate()
+    )
+    not DailySummary(userId == $userId, date == $date)
+then
+    String key = "daily:" + $userId + ":" + $date;
+    Jedis jedis = myRedisPool.getResource();
+    Double total = jedis.incrByFloat(key, 0.0);
+    insert(new DailySummary($userId, $date, total));
+    jedis.expire(key, 172800); // 48小时过期
+    jedis.close();
+    System.out.println("Initialize"+$userId+$date+total);
+end
+
+rule "Check Daily Limit"
+salience 10
+when
+    $t: Transaction($userId: userId, $date: timestamp.toLocalDate(), $amount: amount, rejected == false)
+    $ds: DailySummary(userId == $userId, date == $date, $total: totalAmount)
+    eval($total + $amount > 10000.00)
+then
+    modify($t) { setRejected(true) };
+    System.out.println("[风控触发] 用户 " + $userId + " 单日限额已达");
+end
+
+rule "Update Summary"
+when
+    $t: Transaction($userId: userId, $date: timestamp.toLocalDate(), $amount: amount, rejected == false)
+    $ds: DailySummary(userId == $userId, date == $date)
+then
+    String key = "daily:" + $userId + ":" + $date;
+    Jedis jedis = myRedisPool.getResource();
+    jedis.incrByFloat(key, $amount);
+    modify($ds) { setTotalAmount($ds.getTotalAmount() + $amount) };
+    System.out.println("[余额修改] 用户 " + $userId + " 单日累加"+$ds.getTotalAmount());
+    jedis.close();
+end

@@ -1,0 +1,8 @@
+# application.yml
+spring:
+  redis:
+    host: 43.134.79.177
+    port: 6379
+
+drools:
+  enabled: true
