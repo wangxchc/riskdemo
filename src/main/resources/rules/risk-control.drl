@@ -5,6 +5,7 @@ import com.nongxinyin.demo.model.Transaction
 import com.nongxinyin.demo.model.DailySummary
 import redis.clients.jedis.Jedis
 import com.nongxinyin.demo.pool.MyJedisPool
+import java.text.DecimalFormat
 
 global com.nongxinyin.demo.pool.MyJedisPool myRedisPool
 
@@ -21,12 +22,20 @@ when
     not DailySummary(userId == $userId, date == $date)
 then
     String key = "daily:" + $userId + ":" + $date;
-    Jedis jedis = myRedisPool.getResource();
-    Double total = jedis.incrByFloat(key, 0.0);
-    insert(new DailySummary($userId, $date, total));
-    jedis.expire(key, 172800); // 48小时过期
-    jedis.close();
-    System.out.println("Initialize"+$userId+$date+total);
+    Jedis jedis = null;
+    Double total = 0.00;
+    try{
+        jedis = myRedisPool.getResource();
+        total = jedis.incrByFloat(key, 0.00);
+        insert(new DailySummary($userId, $date, total));
+        jedis.expire(key, 172800); // 48小时过期
+    }finally{
+        if(jedis!=null){
+            jedis.close();
+        }
+    }
+    DecimalFormat df = new DecimalFormat("#0.00");
+    System.out.println("Initialize"+$userId+$date+df.format(total));
 end
 
 rule "Check Daily Limit"
@@ -56,5 +65,6 @@ then
             jedis.close();
         }
     }
-    System.out.println("[余额修改] 用户 " + $userId + " 单日累加至"+$ds.getTotalAmount());
+    DecimalFormat df = new DecimalFormat("#0.00");
+    System.out.println("[余额修改] 用户 " + $userId + " 单日累加至:"+df.format($ds.getTotalAmount()));
 end
